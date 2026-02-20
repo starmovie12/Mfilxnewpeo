@@ -362,7 +362,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
   }
 
   if (!movie) return null;
-  const videoSource = movie.video_url || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+  const videoSource = "https://pub-34413a7eec4f40c883aa01fe9d524f5c.r2.dev/72a23d715781d48564f8d8da4914461e?token=1771607272";
 
   const progressPercent = (currentTime / duration) * 100 || 0;
 
