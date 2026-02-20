@@ -44,7 +44,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
                              (element as any).msRequestFullscreen;
 
         if (requestMethod) {
-          await requestMethod.call(element);
+          try {
+            await requestMethod.call(element);
+          } catch (fsErr) {
+            console.warn("Fullscreen request denied or failed:", fsErr);
+            // If fullscreen fails, we still might want to try CSS fallback if it's a mobile device in portrait
+            if (window.innerHeight > window.innerWidth) {
+              setIsForceLandscape(true);
+            }
+            return; // Don't try to lock orientation if fullscreen failed
+          }
         }
 
         if (window.screen.orientation && (window.screen.orientation as any).lock) {
@@ -52,7 +61,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
             await (window.screen.orientation as any).lock('landscape');
             setIsForceLandscape(false);
           } catch (orientationErr) {
-            console.warn("Orientation lock failed, applying CSS fallback:", orientationErr);
+            // This is where "Permissions check failed" usually happens
+            console.warn("Orientation lock failed (likely missing fullscreen or permission), applying CSS fallback");
             setIsForceLandscape(true);
           }
         } else {
@@ -60,8 +70,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
         }
       }
     } catch (err) {
-      console.error("Fullscreen/Orientation error:", err);
-      // Fallback if we are in portrait
+      // Catch-all for any other errors
       if (window.innerHeight > window.innerWidth) {
         setIsForceLandscape(true);
       }
@@ -74,18 +83,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
       const data = await fetchMovieById(movieId);
       setMovie(data);
       setLoading(false);
-      setTimeout(enterFullscreenAndLandscape, 600);
     };
     loadData();
-  }, [movieId, enterFullscreenAndLandscape]);
+  }, [movieId]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) onClose();
+      // We no longer call onClose() here to prevent the player from closing
+      // when the browser exits fullscreen (e.g., during app switching).
+      // The player stays mounted as a fixed overlay.
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [onClose]);
+  }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && videoRef.current && !videoRef.current.paused) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     const handleOrientationChange = () => {
@@ -112,6 +133,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
     }
   }, [hideControls, isLocked]);
 
+  const seek = useCallback((amount: number) => {
+    if (isLocked || !videoRef.current) return;
+    
+    // Update video and clock immediately
+    const newTime = Math.min(Math.max(videoRef.current.currentTime + amount, 0), duration);
+    videoRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+    
+    // Show visual feedback label under the button
+    const side = amount > 0 ? 'right' : 'left';
+    setAccumulatedSeek(prev => {
+      if (seekGesture.visible && seekGesture.side === side) return prev + amount;
+      return amount;
+    });
+    setSeekGesture({ side, visible: true });
+
+    if (seekDebounceRef.current) window.clearTimeout(seekDebounceRef.current);
+    seekDebounceRef.current = window.setTimeout(() => {
+      setSeekGesture(prev => ({ ...prev, visible: false }));
+      setAccumulatedSeek(0);
+    }, 800);
+
+    resetControlsTimeout();
+  }, [resetControlsTimeout, isLocked, seekGesture.visible, seekGesture.side, duration]);
+
   const toggleControls = (e: React.MouseEvent) => {
     e.stopPropagation();
     
@@ -130,27 +176,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
 
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
       // Consecutive tap detected
-      const side = isRightSide ? 'right' : 'left';
+      const amount = isRightSide ? 10 : -10;
+      seek(amount);
       
       // Hide controls immediately on double tap
       setShowControls(false);
       if (controlsTimeoutRef.current) window.clearTimeout(controlsTimeoutRef.current);
       
-      setAccumulatedSeek(prev => prev + (isRightSide ? 10 : -10));
-      setSeekGesture({ side, visible: true });
-
-      // Debounce the actual seek to the video
-      if (seekDebounceRef.current) window.clearTimeout(seekDebounceRef.current);
-      seekDebounceRef.current = window.setTimeout(() => {
-        setAccumulatedSeek(total => {
-          if (videoRef.current && total !== 0) {
-            videoRef.current.currentTime += total;
-          }
-          return 0;
-        });
-        setSeekGesture(prev => ({ ...prev, visible: false }));
-      }, 800);
-
       lastTapRef.current = now;
       return;
     }
@@ -178,12 +210,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
       videoRef.current.pause();
       setIsPlaying(false);
     }
-    resetControlsTimeout();
-  }, [resetControlsTimeout, isLocked]);
-
-  const seek = useCallback((amount: number) => {
-    if (isLocked || !videoRef.current) return;
-    videoRef.current.currentTime += amount;
     resetControlsTimeout();
   }, [resetControlsTimeout, isLocked]);
 
@@ -250,7 +276,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
       setBrightness(newValue);
       setGestureInfo({ type: 'brightness', value: newValue, visible: true });
     }
-    resetControlsTimeout();
+    if (showControls) {
+      resetControlsTimeout();
+    }
   };
 
   const handleTouchEnd = () => {
@@ -304,7 +332,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
       } : {}}
       onMouseMove={resetControlsTimeout}
       onClick={toggleControls}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
+      <style>{`
+        @keyframes elasticRipple {
+          0% { transform: scale(0.5); opacity: 0; }
+          20% { opacity: 0.6; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
+        .seek-ripple {
+          position: absolute;
+          width: 100px;
+          height: 100px;
+          background: radial-gradient(circle, rgba(229,9,20,0.5) 0%, transparent 75%);
+          border-radius: 50%;
+          pointer-events: none;
+          animation: elasticRipple 0.7s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+          filter: blur(4px);
+        }
+        .icon-zoom {
+          transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .icon-zoom-active {
+          transform: scale(1.35);
+          color: #e50914;
+          filter: drop-shadow(0 0 15px rgba(229,9,20,0.8));
+        }
+      `}</style>
       <video
         ref={videoRef}
         src={videoSource}
@@ -322,14 +378,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
 
       {/* Main Controls Overlay */}
       <div 
-        className={`absolute inset-0 flex flex-col justify-between bg-black/10 transition-opacity ${showControls && !seekGesture.visible ? 'opacity-100 duration-500' : 'opacity-0 duration-0 pointer-events-none'}`}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        className={`absolute inset-0 flex flex-col justify-between bg-black/10 transition-opacity ${(showControls || seekGesture.visible) ? 'opacity-100 duration-500' : 'opacity-0 duration-0 pointer-events-none'}`}
       >
         
         {/* Header - Simple and Clean */}
-        <div className={`w-full px-8 pt-6 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/30 to-transparent transition-transform duration-500 ${isLocked ? '-translate-y-full' : 'translate-y-0'}`}>
+        <div className={`w-full px-8 pt-6 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/30 to-transparent transition-transform duration-500 ${isLocked || (!showControls && seekGesture.visible) ? '-translate-y-full' : 'translate-y-0'}`}>
           <div className="flex items-center">
             <button 
               onClick={(e) => {
@@ -354,15 +407,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="flex items-center justify-center gap-16 pointer-events-auto">
             {!isLocked && (
-              <button onClick={(e) => { e.stopPropagation(); seek(-10); }} className="p-4 text-white/60 hover:text-white transition-all transform hover:scale-110 active:scale-90">
+              <button 
+                onClick={(e) => { e.stopPropagation(); seek(-10); }} 
+                className={`p-4 transition-all transform active:scale-95 ${seekGesture.visible && seekGesture.side === 'left' ? 'text-[#e50914]' : 'text-white/60 hover:text-white'} ${(!showControls && seekGesture.visible && seekGesture.side === 'right') ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+              >
                 <div className="relative flex flex-col items-center">
-                  <RotateCcw size={48} strokeWidth={1.5} />
+                  {seekGesture.visible && seekGesture.side === 'left' && <div className="seek-ripple" />}
+                  <RotateCcw size={48} strokeWidth={1.5} className={`icon-zoom ${seekGesture.visible && seekGesture.side === 'left' ? 'icon-zoom-active' : ''}`} />
                   <span className="text-[10px] font-black absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-0.5">10</span>
+                  {seekGesture.visible && seekGesture.side === 'left' && (
+                    <span className="absolute -bottom-8 text-white font-black text-sm whitespace-nowrap drop-shadow-lg">{accumulatedSeek}s</span>
+                  )}
                 </div>
               </button>
             )}
 
-            <div className="relative">
+            <div className={`relative transition-opacity duration-300 ${!showControls && seekGesture.visible ? 'opacity-0' : 'opacity-100'}`}>
               {isBuffering ? (
                 <div className="w-16 h-16 border-[4px] border-[#e50914] border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(229,9,20,0.6)]"></div>
               ) : !isLocked && (
@@ -376,10 +436,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
             </div>
 
             {!isLocked && (
-              <button onClick={(e) => { e.stopPropagation(); seek(10); }} className="p-4 text-white/60 hover:text-white transition-all transform hover:scale-110 active:scale-90">
+              <button 
+                onClick={(e) => { e.stopPropagation(); seek(10); }} 
+                className={`p-4 transition-all transform active:scale-95 ${seekGesture.visible && seekGesture.side === 'right' ? 'text-[#e50914]' : 'text-white/60 hover:text-white'} ${(!showControls && seekGesture.visible && seekGesture.side === 'left') ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+              >
                 <div className="relative flex flex-col items-center">
-                  <RotateCw size={48} strokeWidth={1.5} />
+                  {seekGesture.visible && seekGesture.side === 'right' && <div className="seek-ripple" />}
+                  <RotateCw size={48} strokeWidth={1.5} className={`icon-zoom ${seekGesture.visible && seekGesture.side === 'right' ? 'icon-zoom-active' : ''}`} />
                   <span className="text-[10px] font-black absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-0.5">10</span>
+                  {seekGesture.visible && seekGesture.side === 'right' && (
+                    <span className="absolute -bottom-8 text-white font-black text-sm whitespace-nowrap drop-shadow-lg">+{accumulatedSeek}s</span>
+                  )}
                 </div>
               </button>
             )}
@@ -387,7 +454,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
         </div>
 
         {/* Bottom Section - Pushed Lower */}
-        <div className={`w-full px-8 pb-4 bg-gradient-to-t from-black via-black/80 to-transparent transition-transform duration-500 ${isLocked ? 'translate-y-full' : 'translate-y-0'}`}>
+        <div className={`w-full px-8 pb-4 bg-gradient-to-t from-black via-black/80 to-transparent transition-transform duration-500 ${isLocked || (!showControls && seekGesture.visible) ? 'translate-y-full' : 'translate-y-0'}`}>
           
           {/* Progress Bar with Dot Indicator - Moved above row for better alignment */}
           <div className="relative w-full mb-4 group cursor-pointer" onClick={(e) => e.stopPropagation()}>
@@ -460,7 +527,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
       </div>
 
       {/* Floating Lock/Unlock Button - Fixed for accessibility when locked */}
-      <div className={`absolute left-8 top-1/2 -translate-y-1/2 transition-opacity ${showControls && !seekGesture.visible ? 'opacity-100 duration-300' : 'opacity-0 duration-0 pointer-events-none'}`}>
+      <div className={`absolute left-8 top-1/2 -translate-y-1/2 transition-opacity ${showControls ? 'opacity-100 duration-300' : 'opacity-0 duration-0 pointer-events-none'}`}>
         <button 
           onClick={(e) => { e.stopPropagation(); setIsLocked(!isLocked); resetControlsTimeout(); }}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isLocked ? 'bg-[#e50914] shadow-2xl text-white scale-110' : 'bg-transparent text-white/60 hover:text-white'}`}
@@ -481,42 +548,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
               style={{ width: `${gestureInfo.value * 100}%` }}
             />
           </div>
-        </div>
-      </div>
-
-      {/* Double Tap Seek Animation (YouTube Style) */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden flex">
-        <style>{`
-          @keyframes seekRipple {
-            0% { transform: scale(0.5); opacity: 0; }
-            50% { opacity: 0.3; }
-            100% { transform: scale(1.5); opacity: 0; }
-          }
-          .animate-seek-ripple {
-            animation: seekRipple 0.8s ease-out forwards;
-          }
-        `}</style>
-        
-        {/* Left Side - Shifted to edge */}
-        <div className="flex-1 flex items-center justify-start pl-16 sm:pl-24">
-          {seekGesture.visible && seekGesture.side === 'left' && (
-            <div className="relative flex flex-col items-center">
-              <div className="absolute w-40 h-40 bg-white/10 rounded-full animate-seek-ripple" />
-              <RotateCcw size={60} className="text-white mb-2 drop-shadow-lg" />
-              <span className="text-white font-black text-3xl drop-shadow-lg">{accumulatedSeek}s</span>
-            </div>
-          )}
-        </div>
-
-        {/* Right Side - Shifted to edge */}
-        <div className="flex-1 flex items-center justify-end pr-16 sm:pr-24">
-          {seekGesture.visible && seekGesture.side === 'right' && (
-            <div className="relative flex flex-col items-center">
-              <div className="absolute w-40 h-40 bg-white/20 rounded-full animate-seek-ripple" />
-              <RotateCw size={60} className="text-white mb-2 drop-shadow-lg" />
-              <span className="text-white font-black text-3xl drop-shadow-lg">+{accumulatedSeek}s</span>
-            </div>
-          )}
         </div>
       </div>
 
