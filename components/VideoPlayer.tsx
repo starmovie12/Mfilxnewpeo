@@ -26,6 +26,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
   const [seekGesture, setSeekGesture] = useState<{ side: 'left' | 'right', visible: boolean }>({ side: 'left', visible: false });
   const [accumulatedSeek, setAccumulatedSeek] = useState(0);
   const [isForceLandscape, setIsForceLandscape] = useState(false);
+  const [bufferProgress, setBufferProgress] = useState(0);
+  const [downloadSpeed, setDownloadSpeed] = useState<string>('0 KB/s');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
@@ -33,6 +35,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
   const touchStartRef = useRef<{ x: number, y: number, value: number } | null>(null);
   const lastTapRef = useRef<number>(0);
   const seekDebounceRef = useRef<number | null>(null);
+  const lastBufferedRef = useRef<number>(0);
+  const lastTimeRef = useRef<number>(Date.now());
 
   const enterFullscreenAndLandscape = useCallback(async () => {
     try {
@@ -120,10 +124,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
   }, []);
 
   const hideControls = useCallback(() => {
-    if (isPlaying) {
+    if (isPlaying && !isBuffering) {
       setShowControls(false);
     }
-  }, [isPlaying]);
+  }, [isPlaying, isBuffering]);
 
   const resetControlsTimeout = useCallback(() => {
     setShowControls(true);
@@ -295,16 +299,70 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
       : `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  const handleProgress = () => {
+    if (videoRef.current && videoRef.current.duration > 0) {
+      const buffered = videoRef.current.buffered;
+      const now = Date.now();
+      const timeDiff = (now - lastTimeRef.current) / 1000;
+
+      if (buffered.length > 0) {
+        // Calculate buffer progress percentage
+        let currentBufferEnd = 0;
+        for (let i = 0; i < buffered.length; i++) {
+          if (buffered.start(i) <= videoRef.current.currentTime && buffered.end(i) >= videoRef.current.currentTime) {
+            currentBufferEnd = buffered.end(i);
+            break;
+          }
+        }
+        
+        if (currentBufferEnd === 0) {
+          for (let i = 0; i < buffered.length; i++) {
+            if (buffered.start(i) > videoRef.current.currentTime) {
+              currentBufferEnd = buffered.end(i);
+              break;
+            }
+          }
+        }
+
+        const total = videoRef.current.duration;
+        const progress = (currentBufferEnd / total) * 100;
+        setBufferProgress(Math.min(Math.round(progress), 100));
+
+        // Calculate download speed (estimation based on buffer growth)
+        if (timeDiff >= 0.8) {
+          const totalBufferedEnd = buffered.end(buffered.length - 1);
+          const bufferedDiff = totalBufferedEnd - lastBufferedRef.current;
+          
+          // Assume average bitrate of 4Mbps (500KB/s) for estimation
+          const estimatedBytes = Math.max(0, bufferedDiff * 500 * 1024);
+          const speedBps = estimatedBytes / timeDiff;
+          
+          if (speedBps > 1024 * 1024) {
+            setDownloadSpeed(`${(speedBps / (1024 * 1024)).toFixed(1)} MB/s`);
+          } else if (speedBps > 0) {
+            setDownloadSpeed(`${(speedBps / 1024).toFixed(0)} KB/s`);
+          } else {
+            setDownloadSpeed('0 KB/s');
+          }
+          
+          lastBufferedRef.current = totalBufferedEnd;
+          lastTimeRef.current = now;
+        }
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="fixed inset-0 z-[100] bg-[#030812] flex items-center justify-center">
-        <div className="w-12 h-12 border-[3px] border-[#e50914] border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(229,9,20,0.3)]"></div>
+        <div className="w-10 h-10 border-[3px] border-white/5 rounded-full"></div>
+        <div className="absolute w-10 h-10 border-[3px] border-[#22c55e] border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(34,197,94,0.3)]"></div>
       </div>
     );
   }
 
   if (!movie) return null;
-  const videoSource = movie.video_url || "https://pub-34413a7eec4f40c883aa01fe9d524f5c.r2.dev/9c5758d1afb2d25ed91d694de729ecb6?token=1771449291";
+  const videoSource = movie.video_url || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
 
   const progressPercent = (currentTime / duration) * 100 || 0;
 
@@ -368,21 +426,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
         style={{ filter: `brightness(${0.5 + brightness})` }}
         playsInline
         autoPlay
+        preload="auto"
         onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime || 0)}
+        onProgress={handleProgress}
         onLoadedMetadata={() => setDuration(videoRef.current?.duration || 0)}
         onWaiting={() => setIsBuffering(true)}
         onPlaying={() => setIsBuffering(false)}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
+        onError={(e) => console.error("Video loading error:", e)}
       />
 
       {/* Main Controls Overlay */}
       <div 
-        className={`absolute inset-0 flex flex-col justify-between bg-black/10 transition-opacity ${(showControls || seekGesture.visible) ? 'opacity-100 duration-500' : 'opacity-0 duration-0 pointer-events-none'}`}
+        className={`absolute inset-0 flex flex-col justify-between bg-black/10 transition-opacity ${(showControls || seekGesture.visible || isBuffering) ? 'opacity-100 duration-500' : 'opacity-0 duration-0 pointer-events-none'}`}
       >
         
         {/* Header - Simple and Clean */}
-        <div className={`w-full px-8 pt-6 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/30 to-transparent transition-transform duration-500 ${isLocked || (!showControls && seekGesture.visible) ? '-translate-y-full' : 'translate-y-0'}`}>
+        <div className={`w-full px-8 pt-6 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/30 to-transparent transition-transform duration-500 ${isLocked || (!showControls && !isBuffering && seekGesture.visible) ? '-translate-y-full' : 'translate-y-0'}`}>
           <div className="flex items-center">
             <button 
               onClick={(e) => {
@@ -422,9 +483,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
               </button>
             )}
 
-            <div className={`relative transition-opacity duration-300 ${!showControls && seekGesture.visible ? 'opacity-0' : 'opacity-100'}`}>
+            <div className={`relative transition-opacity duration-300 ${!showControls && !isBuffering && seekGesture.visible ? 'opacity-0' : 'opacity-100'}`}>
               {isBuffering ? (
-                <div className="w-16 h-16 border-[4px] border-[#e50914] border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(229,9,20,0.6)]"></div>
+                <div className="relative flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 border-[3px] border-white/5 rounded-full"></div>
+                  <div className="absolute top-0 w-12 h-12 border-[3px] border-[#22c55e] border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(34,197,94,0.5)]"></div>
+                  <div className="mt-6 flex flex-col items-center">
+                    <span className="text-white text-[11px] font-black tracking-wider tabular-nums drop-shadow-md">{downloadSpeed}</span>
+                  </div>
+                </div>
               ) : !isLocked && (
                 <button 
                   onClick={togglePlay}
@@ -454,7 +521,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
         </div>
 
         {/* Bottom Section - Pushed Lower */}
-        <div className={`w-full px-8 pb-4 bg-gradient-to-t from-black via-black/80 to-transparent transition-transform duration-500 ${isLocked || (!showControls && seekGesture.visible) ? 'translate-y-full' : 'translate-y-0'}`}>
+        <div className={`w-full px-8 pb-4 bg-gradient-to-t from-black via-black/80 to-transparent transition-transform duration-500 ${isLocked || (!showControls && !isBuffering && seekGesture.visible) ? 'translate-y-full' : 'translate-y-0'}`}>
           
           {/* Progress Bar with Dot Indicator - Moved above row for better alignment */}
           <div className="relative w-full mb-4 group cursor-pointer" onClick={(e) => e.stopPropagation()}>
