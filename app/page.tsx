@@ -1,15 +1,16 @@
+'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Movie } from './types.ts';
-import { fetchAllMovies } from './services/firebaseService.ts';
-import { VideoPlayer } from './components/VideoPlayer.tsx';
-import { HeroBanner } from './components/HeroBanner.tsx';
-import { MovieRow } from './components/MovieRow.tsx';
+import { useRouter } from 'next/navigation';
+import { Movie } from '../types.ts';
+import { fetchAllMovies } from '../services/firebaseService.ts';
+import { HeroBanner } from '../components/HeroBanner.tsx';
+import { MovieRow } from '../components/MovieRow.tsx';
 
-export default function App() {
+export default function Home() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedMovieId, setSelectedMovieId] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const load = async () => {
@@ -21,41 +22,9 @@ export default function App() {
     load();
   }, []);
 
-  const enterFullScreen = useCallback(() => {
-    if (document.fullscreenElement) return;
-
-    const element = document.documentElement as any;
-    const requestMethod = 
-      element.requestFullscreen || 
-      element.webkitRequestFullscreen || 
-      element.mozRequestFullScreen || 
-      element.msRequestFullscreen;
-
-    if (requestMethod) {
-      requestMethod.call(element).catch((err: any) => {
-        console.warn(`Fullscreen request failed: ${err.message}`);
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleInitialInteraction = () => {
-      enterFullScreen();
-    };
-
-    window.addEventListener('click', handleInitialInteraction);
-    window.addEventListener('touchstart', handleInitialInteraction);
-
-    return () => {
-      window.removeEventListener('click', handleInitialInteraction);
-      window.removeEventListener('touchstart', handleInitialInteraction);
-    };
-  }, [enterFullScreen]);
-
   const handleMovieClick = useCallback((movie: Movie) => {
-    setSelectedMovieId(movie.movie_id);
-    enterFullScreen();
-  }, [enterFullScreen]);
+    router.push(`/player/${movie.movie_id}`);
+  }, [router]);
 
   const trending = useMemo(() => movies.slice(0, 8), [movies]);
   const action = useMemo(() => movies.filter(m => m.genre?.toLowerCase().includes('action')).slice(0, 10), [movies]);
@@ -65,8 +34,8 @@ export default function App() {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-[#030812]">
          <div className="relative w-12 h-12">
-            <div className="absolute inset-0 border-[3px] border-blue-600/10 rounded-full"></div>
-            <div className="absolute inset-0 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="absolute inset-0 border-[3px] border-red-600/10 rounded-full"></div>
+            <div className="absolute inset-0 border-[3px] border-red-600 border-t-transparent rounded-full animate-spin"></div>
          </div>
       </div>
     );
@@ -76,7 +45,7 @@ export default function App() {
     <div className="relative min-h-screen bg-[#030812] text-white overflow-x-hidden pb-24">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-[60] px-5 py-4 flex items-center justify-between glass-header pointer-events-none">
-        <div className="pointer-events-auto flex items-center gap-2 group cursor-pointer" onClick={enterFullScreen}>
+        <div className="pointer-events-auto flex items-center gap-2 group cursor-pointer">
           <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center shadow-lg shadow-red-900/40 group-active:scale-90 transition-transform">
             <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 3L2 12h3v8h14v-8h3L12 3zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" />
@@ -110,7 +79,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* Floating Category Pill - SPORTS REMOVED, SEARCH BOX ADDED */}
+      {/* Floating Category Pill */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[85%] max-w-sm">
         <div className="bg-gradient-to-r from-[#161b33] to-[#4a154b] flex items-center h-[60px] rounded-full px-2 shadow-2xl shadow-black/80 border border-white/10 backdrop-blur-xl">
           
@@ -126,7 +95,6 @@ export default function App() {
           
           <div className="w-[1px] h-6 bg-white/10 mx-1" />
 
-          {/* Search Box (Goal dabba) on the right side */}
           <div className="flex items-center pr-1 gap-2">
             <button className="w-11 h-11 rounded-full bg-white/10 border border-white/10 flex items-center justify-center text-white hover:bg-white/20 active:scale-90 transition-all shadow-inner">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -144,13 +112,6 @@ export default function App() {
           </div>
         </div>
       </div>
-
-      {selectedMovieId && (
-        <VideoPlayer 
-          movieId={selectedMovieId} 
-          onClose={() => setSelectedMovieId(null)} 
-        />
-      )}
     </div>
   );
 }

@@ -1,0 +1,46 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --primary-red: #E50914;
+  --bg-black: #0f0f0f;
+  --bg-card: #1a1a1a;
+  --text-main: #ffffff;
+  --text-sec: #a3a3a3;
+  --accent-gold: #ffc107;
+  --meta-bg: rgba(255, 255, 255, 0.1);
+  --divider-color: rgba(255, 255, 255, 0.15);
+  --shimmer-bg: #222;
+  --shimmer-highlight: #333;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #030812;
+  color: white;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.glass-header {
+  background: linear-gradient(to bottom, rgba(3, 8, 18, 0.95) 0%, rgba(3, 8, 18, 0.8) 50%, transparent 100%);
+  backdrop-filter: blur(10px);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
