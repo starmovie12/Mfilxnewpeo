@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Movie } from '../types.ts';
-import { fetchAllMovies } from '../services/firebaseService.ts';
-import { HeroBanner } from '../components/HeroBanner.tsx';
-import { MovieRow } from '../components/MovieRow.tsx';
+import { Movie } from '../types';
+import { fetchAllMovies } from '../services/firebaseService';
+import { HeroBanner } from '../components/HeroBanner';
+import { MovieRow } from '../components/MovieRow';
 
 export default function Home() {
   const [movies, setMovies] = useState<Movie[]>([]);
