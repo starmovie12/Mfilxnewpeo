@@ -44,3 +44,11 @@ body {
 .animate-fadeIn {
   animation: fadeIn 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
+
+.aspect-hero {
+  aspect-ratio: 16 / 10;
+}
+
+.hero-gradient {
+  background: linear-gradient(to top, #030812 0%, rgba(3, 8, 18, 0.8) 20%, rgba(3, 8, 18, 0.4) 50%, transparent 100%);
+}

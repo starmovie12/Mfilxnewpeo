@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "MFLIX - Stream Your Favorites",
-  description: "High-quality movie streaming platform",
+  title: "MFLIX - Premium HD Streaming",
+  description: "Netflix-style mobile-first movie streaming web app",
 };
 
 export default function RootLayout({

@@ -1,117 +1,139 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { Movie } from '../types';
+import React, { useEffect, useState } from 'react';
 import { fetchAllMovies } from '../services/firebaseService';
+import { Movie } from '../types';
 import { HeroBanner } from '../components/HeroBanner';
 import { MovieRow } from '../components/MovieRow';
+import { Search, Bell, User } from 'lucide-react';
+import { VideoPlayer } from '../components/VideoPlayer';
 
-export default function Home() {
+export default function HomePage() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [selectedMovieId, setSelectedMovieId] = useState<string | null>(null);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
+    const loadMovies = async () => {
       const data = await fetchAllMovies();
       setMovies(data);
       setLoading(false);
     };
-    load();
+    loadMovies();
   }, []);
-
-  const handleMovieClick = useCallback((movie: Movie) => {
-    router.push(`/player/${movie.movie_id}`);
-  }, [router]);
-
-  const trending = useMemo(() => movies.slice(0, 8), [movies]);
-  const action = useMemo(() => movies.filter(m => m.genre?.toLowerCase().includes('action')).slice(0, 10), [movies]);
-  const horror = useMemo(() => movies.filter(m => m.genre?.toLowerCase().includes('horror')).slice(0, 10), [movies]);
 
   if (loading) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#030812]">
-         <div className="relative w-12 h-12">
-            <div className="absolute inset-0 border-[3px] border-red-600/10 rounded-full"></div>
-            <div className="absolute inset-0 border-[3px] border-red-600 border-t-transparent rounded-full animate-spin"></div>
-         </div>
+      <div className="min-h-screen bg-[#030812] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-white/10 border-t-[#E50914] rounded-full animate-spin" />
       </div>
     );
   }
 
+  // Smart Filtering Logic
+  const featured = movies.filter(m => m.is_featured === 'Yes').length > 0 
+    ? movies.filter(m => m.is_featured === 'Yes') 
+    : movies.slice(0, 8);
+
+  const trending = movies.filter(m => m.is_trending_now === 'Yes').length > 0
+    ? movies.filter(m => m.is_trending_now === 'Yes')
+    : movies.slice(0, 12);
+
+  const latest = [...movies]
+    .sort((a, b) => Number(b.year) - Number(a.year))
+    .slice(0, 12);
+
+  const bollywood = movies
+    .filter(m => m.industry?.toLowerCase().includes('bollywood'))
+    .slice(0, 12);
+
+  const action = movies
+    .filter(m => m.genre?.toLowerCase().includes('action'))
+    .slice(0, 12);
+
+  const comedy = movies
+    .filter(m => m.genre?.toLowerCase().includes('comedy'))
+    .slice(0, 12);
+
+  const horror = movies
+    .filter(m => 
+      m.genre?.toLowerCase().includes('horror') || 
+      m.genre?.toLowerCase().includes('thriller')
+    ).slice(0, 12);
+
+  const romance = movies
+    .filter(m => m.genre?.toLowerCase().includes('romance'))
+    .slice(0, 12);
+
+  const uhd = movies
+    .filter(m => 
+      m.quality_name?.includes('4K') || 
+      m.quality?.includes('4K')
+    ).slice(0, 12);
+
   return (
-    <div className="relative min-h-screen bg-[#030812] text-white overflow-x-hidden pb-24">
+    <main className="min-h-screen bg-[#030812] pb-20">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-[60] px-5 py-4 flex items-center justify-between glass-header pointer-events-none">
-        <div className="pointer-events-auto flex items-center gap-2 group cursor-pointer">
-          <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center shadow-lg shadow-red-900/40 group-active:scale-90 transition-transform">
-            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 3L2 12h3v8h14v-8h3L12 3zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" />
-            </svg>
-          </div>
-          <span className="text-xl font-[900] tracking-tighter text-white uppercase italic">MFLIX</span>
+      <header className="fixed top-0 left-0 right-0 z-[100] glass-header px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-8">
+          <h1 className="text-[#E50914] text-2xl font-black tracking-tighter">MFLIX</h1>
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-white/70">
+            <button className="text-white">Home</button>
+            <button className="hover:text-white transition-colors">Movies</button>
+            <button className="hover:text-white transition-colors">TV Shows</button>
+            <button className="hover:text-white transition-colors">My List</button>
+          </nav>
         </div>
-        
-        <div className="pointer-events-auto flex items-center gap-4">
-           <button className="text-white/80 p-1 relative active:scale-90 transition-transform">
-             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-             </svg>
-             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-600 rounded-full border border-black animate-pulse"></span>
-           </button>
-           
-           <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 p-0.5 overflow-hidden active:scale-90 transition-transform">
-             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Professional" className="w-full h-full object-cover" alt="User" />
-           </div>
+        <div className="flex items-center gap-5">
+          <Search size={22} className="text-white/80 cursor-pointer" />
+          <Bell size={22} className="text-white/80 cursor-pointer" />
+          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center cursor-pointer">
+            <User size={18} className="text-white" />
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="animate-fadeIn">
-        <HeroBanner movies={trending} onMovieClick={handleMovieClick} />
+      {/* Hero Banner */}
+      <HeroBanner 
+        movies={featured} 
+        onMovieClick={(m) => setSelectedMovieId(m.movie_id)} 
+      />
 
-        <div className="space-y-6">
-          <MovieRow title="Latest Blockbusters" movies={trending} onMovieClick={handleMovieClick} />
-          <MovieRow title="High-Octane Action" movies={action.length ? action : movies.slice(10, 20)} onMovieClick={handleMovieClick} />
-          <MovieRow title="Thrillers & Horror" movies={horror.length ? horror : movies.slice(5, 15)} onMovieClick={handleMovieClick} />
-        </div>
-      </main>
-
-      {/* Floating Category Pill */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[85%] max-w-sm">
-        <div className="bg-gradient-to-r from-[#161b33] to-[#4a154b] flex items-center h-[60px] rounded-full px-2 shadow-2xl shadow-black/80 border border-white/10 backdrop-blur-xl">
-          
-          <button className="flex-1 text-center text-white/70 hover:text-white text-[15px] font-bold tracking-tight active:scale-95 transition-all">
-            TV
-          </button>
-          
-          <div className="w-[1px] h-6 bg-white/10 mx-1" />
-          
-          <button className="flex-1 text-center text-white text-[15px] font-bold tracking-tight active:scale-95 transition-all">
-            Movies
-          </button>
-          
-          <div className="w-[1px] h-6 bg-white/10 mx-1" />
-
-          <div className="flex items-center pr-1 gap-2">
-            <button className="w-11 h-11 rounded-full bg-white/10 border border-white/10 flex items-center justify-center text-white hover:bg-white/20 active:scale-90 transition-all shadow-inner">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
-
-            <div className="w-[1px] h-6 bg-white/10" />
-            
-            <button className="px-3 h-11 flex items-center justify-center text-white/80 hover:text-white active:scale-90 transition-all">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" />
-              </svg>
-            </button>
-          </div>
-        </div>
+      {/* Movie Rows */}
+      <div className="space-y-8 -mt-12 relative z-10">
+        {trending.length > 0 && (
+          <MovieRow title="Trending Now" movies={trending} />
+        )}
+        {latest.length > 0 && (
+          <MovieRow title="Latest Releases" movies={latest} />
+        )}
+        {uhd.length > 0 && (
+          <MovieRow title="4K Ultra HD" movies={uhd} />
+        )}
+        {bollywood.length > 0 && (
+          <MovieRow title="Bollywood Hits" movies={bollywood} />
+        )}
+        {action.length > 0 && (
+          <MovieRow title="Action Packed" movies={action} />
+        )}
+        {comedy.length > 0 && (
+          <MovieRow title="Comedy Central" movies={comedy} />
+        )}
+        {horror.length > 0 && (
+          <MovieRow title="Horror & Thriller" movies={horror} />
+        )}
+        {romance.length > 0 && (
+          <MovieRow title="Romantic Collection" movies={romance} />
+        )}
       </div>
-    </div>
+
+      {/* Video Player Overlay */}
+      {selectedMovieId && (
+        <VideoPlayer 
+          movieId={selectedMovieId} 
+          onClose={() => setSelectedMovieId(null)} 
+        />
+      )}
+    </main>
   );
 }

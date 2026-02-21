@@ -1,36 +1,56 @@
 
 import { Movie } from '../types';
 
-// Using the configuration provided in the original HTML
-const firebaseConfig = {
-    apiKey: "AIzaSyAFj5jrF26JDJdcteQzdojXcUypvm3UaKc", 
-    authDomain: "bhaag-df531.firebaseapp.com",        
-    databaseURL: "https://bhaag-df531-default-rtdb.firebaseio.com", 
-    projectId: "bhaag-df531",                         
-    storageBucket: "bhaag-df531.firebasestorage.app",
-    appId: "1:421542632463:web:xxxxxxxxxxxxxx" 
-};
-
-/**
- * Since standard Firebase v8/v9 imports might conflict with the sandbox,
- * we use a simplified fetch-based approach for the Realtime Database REST API.
- * This is faster and more reliable in this specific environment.
- */
-
-const BASE_URL = firebaseConfig.databaseURL;
+const BASE_URL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL 
+  || "https://bhaag-df531-default-rtdb.firebaseio.com";
 
 // Mock data for fallback when Firebase fails
-const MOCK_MOVIES: Record<string, Movie> = {
-  "sample-1": {
+const MOCK_MOVIES: Movie[] = [
+  {
     movie_id: "sample-1",
-    title: "Sample Movie",
+    title: "Big Buck Bunny",
     video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    quality_name: "720P HD",
-    poster: "https://picsum.photos/seed/movie1/800/450",
+    quality_name: "1080P FHD",
+    poster: "https://picsum.photos/seed/bunny/800/450",
     rating: "8.5",
-    year: "2024"
+    year: "2024",
+    genre: "Animation",
+    is_featured: "Yes"
+  },
+  {
+    movie_id: "sample-2",
+    title: "Elephant's Dream",
+    video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    quality_name: "1080P FHD",
+    poster: "https://picsum.photos/seed/elephant/800/450",
+    rating: "7.9",
+    year: "2024",
+    genre: "Animation",
+    is_trending_now: "Yes"
+  },
+  {
+    movie_id: "sample-3",
+    title: "For Bigger Blazes",
+    video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    quality_name: "1080P FHD",
+    poster: "https://picsum.photos/seed/blazes/800/450",
+    rating: "8.2",
+    year: "2024",
+    genre: "Action",
+    is_featured: "Yes"
+  },
+  {
+    movie_id: "sample-4",
+    title: "Subaru Outback",
+    video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
+    quality_name: "1080P FHD",
+    poster: "https://picsum.photos/seed/subaru/800/450",
+    rating: "7.5",
+    year: "2024",
+    genre: "Adventure",
+    is_trending_now: "Yes"
   }
-};
+];
 
 export const fetchAllMovies = async (): Promise<Movie[]> => {
   try {
@@ -42,13 +62,12 @@ export const fetchAllMovies = async (): Promise<Movie[]> => {
     });
     if (!response.ok) throw new Error('Failed to fetch movies');
     const data = await response.json();
-    if (!data) return Object.values(MOCK_MOVIES);
+    if (!data) return MOCK_MOVIES;
     
     return Object.values(data) as Movie[];
-  } catch (error) {
-    console.error("Firebase fetch error:", error);
-    // Return mock data as fallback
-    return Object.values(MOCK_MOVIES);
+  } catch (error: any) {
+    console.error("Firebase fetch error:", error?.message || error);
+    return MOCK_MOVIES;
   }
 };
 
@@ -62,11 +81,10 @@ export const fetchMovieById = async (id: string): Promise<Movie | null> => {
     });
     if (!response.ok) throw new Error('Failed to fetch movie');
     const data = await response.json();
-    if (!data) return MOCK_MOVIES[id] || MOCK_MOVIES["sample-1"];
+    if (!data) return MOCK_MOVIES.find(m => m.movie_id === id) || MOCK_MOVIES[0];
     return data as Movie;
-  } catch (error) {
-    console.error("Firebase fetch by id error:", error);
-    // Return mock data as fallback
-    return MOCK_MOVIES[id] || MOCK_MOVIES["sample-1"];
+  } catch (error: any) {
+    console.error("Firebase fetch by id error:", error?.message || error);
+    return MOCK_MOVIES.find(m => m.movie_id === id) || MOCK_MOVIES[0];
   }
 };
