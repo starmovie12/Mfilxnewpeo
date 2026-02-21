@@ -124,7 +124,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
   }, []);
 
   const hideControls = useCallback(() => {
-    if (isPlaying && !isBuffering) {
+    if (isPlaying || isBuffering) {
       setShowControls(false);
     }
   }, [isPlaying, isBuffering]);
@@ -443,7 +443,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
       >
         
         {/* Header - Simple and Clean */}
-        <div className={`w-full px-8 pt-6 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/30 to-transparent transition-transform duration-500 ${isLocked || (!showControls && !isBuffering && seekGesture.visible) ? '-translate-y-full' : 'translate-y-0'}`}>
+        <div className={`w-full px-8 pt-6 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/30 to-transparent transition-transform duration-500 ${isLocked || (!showControls && seekGesture.visible) ? '-translate-y-full' : 'translate-y-0'}`}>
           <div className="flex items-center">
             <button 
               onClick={(e) => {
@@ -483,7 +483,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
               </button>
             )}
 
-            <div className={`relative transition-opacity duration-300 ${!showControls && !isBuffering && seekGesture.visible ? 'opacity-0' : 'opacity-100'}`}>
+            <div className={`relative transition-opacity duration-300 ${(!showControls && !isBuffering && seekGesture.visible) ? 'opacity-0' : 'opacity-100'}`}>
               {isBuffering ? (
                 <div className="relative flex flex-col items-center justify-center">
                   <div className="w-12 h-12 border-[3px] border-white/5 rounded-full"></div>
@@ -521,10 +521,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
         </div>
 
         {/* Bottom Section - Pushed Lower */}
-        <div className={`w-full px-8 pb-4 bg-gradient-to-t from-black via-black/80 to-transparent transition-transform duration-500 ${isLocked || (!showControls && !isBuffering && seekGesture.visible) ? 'translate-y-full' : 'translate-y-0'}`}>
+        <div className="w-full px-8 pb-4 bg-gradient-to-t from-black via-black/80 to-transparent">
           
-          {/* Progress Bar with Dot Indicator - Moved above row for better alignment */}
-          <div className="relative w-full mb-4 group cursor-pointer" onClick={(e) => e.stopPropagation()}>
+          {/* Progress Bar with Dot Indicator - Stays visible during buffering */}
+          <div 
+            className={`relative w-full mb-4 group cursor-pointer transition-transform duration-500 ${isLocked || (!showControls && !isBuffering && seekGesture.visible) ? 'translate-y-[150%]' : 'translate-y-0'}`} 
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="relative h-[4px] w-full bg-white/10 rounded-full">
               {/* Active Progress */}
               <div 
@@ -548,8 +551,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, onClose }) =>
             />
           </div>
 
-          {/* Time & Icons Row - Combined for tighter layout */}
-          <div className="flex items-center justify-between pb-2">
+          {/* Time & Icons Row - Hides on timeout */}
+          <div className={`flex items-center justify-between pb-2 transition-transform duration-500 ${isLocked || (!showControls && seekGesture.visible) ? 'translate-y-full' : 'translate-y-0'}`}>
             <div className="flex items-center gap-6">
               <button onClick={togglePlay} className="text-white hover:text-[#e50914] transition-colors p-1">
                 {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" />}
